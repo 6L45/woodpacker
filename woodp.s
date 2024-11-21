@@ -1,3 +1,4 @@
+cat woodp.s 
 section .bss
 	filename resq 1
 	argv1_len resq 1
@@ -125,8 +126,71 @@ find_note_section:
 	mov rbp, rsp
 	; ------------------------------
 
-	
+	; RDI pointe vers le début du ELF Header
 
+	mov eax, dword [rdi + 0x20]	; Start of program headers
+	movzx rbx, word [rdi + 0x36]	; Size of program headers
+	movzx rcx, word [rdi + 0x38]	; Number of program headers
+
+	push rsi			; keep file size (just in case)
+
+	mov rsi, rdi			; ptr on file
+	add rsi, rax			; ptr += rax
+	loop_header:
+		mov edx, dword [rsi]
+		cmp edx, 0x4		; Elf64_Phdr.p_type == PT_NOTE
+		je eol_lheader
+
+		add rsi, rbx
+		dec rcx
+		test rcx, rcx
+		jz out1
+		jmp loop_header
+	eol_lheader:
+
+
+	mov eax, dword [rdi + 0x28]	; Start of section headers
+	movzx rbx, word [rdi + 0x3A]	; Size of section headers
+	movzx rcx, word [rdi + 0x3C]	; Number of section headers
+
+	mov rsi, rdi
+	add rsi, rax
+	loop_section:
+		mov r8d, dword [rsi + 0x4]
+		cmp r8d, 0x7
+		je hit_lsection
+
+		cmp r8d, 0x3
+		je shrtab_section
+
+		add rsi, rbx
+		dec rcx
+		test rcx, rcx
+		jz eof_find_note
+		jmp loop_section
+
+	hit_lsection:
+		mov r13d, dword [rsi]
+		push r13
+
+		add rsi, rbx
+		dec rcx
+		test rcx, rcx
+		jz eof_find_note
+		jmp loop_section
+
+	shrtab_section:
+		mov r15, qword [rsi + 0x18]
+		mov r14, rdi
+		add r14, r15
+
+		add rsi, rbx
+		dec rcx
+		test rcx, rcx
+		jz eof_find_note
+		jmp loop_section
+
+	eof_find_note:
 	; ------------------------------
 	pop rbp
 	pop rbx
@@ -149,8 +213,8 @@ _start:
 
 	call open_file_and_map		; r12 = map && r13 = size
 
-	mov rdi, r12
-	mov rsi, r13
+	mov rdi, r12			; map
+	mov rsi, r13			; size
 	call check_elf64_header
 	call find_note_section
 
